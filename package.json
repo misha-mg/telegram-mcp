@@ -1,0 +1,42 @@
+{
+  "name": "telegram-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local MCP server for controlled Telegram access through GramJS and MTProto.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/misha-mg/telegram-mcp.git"
+  },
+  "keywords": [
+    "mcp",
+    "telegram",
+    "gramjs",
+    "mtproto",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "bin": {
+    "ltvx-telegram-mcp": "./dist/server.js",
+    "ltvx-telegram-login": "./dist/login.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/server.ts",
+    "login": "tsx src/login.ts",
+    "start": "node dist/server.js",
+    "start:built": "node dist/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "dotenv": "^17.2.0",
+    "input": "^1.0.1",
+    "telegram": "^2.26.22",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}
