@@ -8,7 +8,7 @@ The server is intended for personal/operator workflows, not bulk outreach automa
 
 ## Problem
 
-The current project stores social outreach artifacts locally, including Telegram drafts and send-attempt logs, but there is no safe, structured way for an agent to inspect Telegram context or perform controlled Telegram actions through an MCP interface.
+Operators often need a safe, structured way for an agent to inspect Telegram context or perform controlled Telegram actions through an MCP interface.
 
 An MCP server can expose a narrow set of Telegram tools to Codex, Claude Desktop, Cursor, or other MCP clients while keeping authentication and session files local.
 
@@ -23,7 +23,7 @@ An MCP server can expose a narrow set of Telegram tools to Codex, Claude Desktop
 - No contact scraping at scale.
 - No automatic Telegram outreach execution.
 - No hosted multi-tenant service.
-- No replacement for the existing SMTP-first outreach pipeline.
+- No replacement for email or CRM systems.
 - No browser automation for Telegram Web.
 
 ## Success Criteria
@@ -162,7 +162,7 @@ Acceptance:
 
 ## Future Slices
 
-- Append Telegram send attempts to local run JSONL files.
+- Append Telegram send attempts to a configurable local audit log.
 - Add allowlist for sendable peers.
 - Add attachment download with file-size caps.
 - Add dialog pinning/folder support.

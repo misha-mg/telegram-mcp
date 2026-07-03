@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerTelegramTools } from "./tools.js";
 
 const server = new McpServer({
-  name: "ltvx-telegram-mcp",
+  name: "telegram-mcp",
   version: "0.1.0",
 });
 

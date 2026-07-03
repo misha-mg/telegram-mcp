@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Node.js 18 or newer.
+- Node.js 20 or newer.
 - Telegram account.
 - Telegram API credentials from `https://my.telegram.org/apps`.
 - An MCP-compatible client that can run a stdio server.
@@ -38,6 +38,14 @@ The helper prompts for phone number and login code. If your account has two-step
 ```bash
 npm run build
 ```
+
+## Test
+
+```bash
+npm test
+```
+
+Tests do not require Telegram credentials. Telegram-dependent behavior is covered through mocked GramJS adapters.
 
 ## Run
 

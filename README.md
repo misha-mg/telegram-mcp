@@ -37,6 +37,14 @@ The login helper saves a session string to `TELEGRAM_SESSION_PATH`, defaulting t
 npm run build
 ```
 
+## Test
+
+```bash
+npm test
+```
+
+The test suite uses mocked Telegram clients for unit coverage and an MCP stdio smoke test that does not require Telegram credentials.
+
 ## MCP Client Config
 
 Example stdio config:
@@ -44,7 +52,7 @@ Example stdio config:
 ```json
 {
   "mcpServers": {
-    "ltvx-telegram": {
+    "telegram-mcp": {
       "command": "node",
       "args": ["/absolute/path/to/telegram-mcp/dist/server.js"],
       "env": {
