@@ -31,6 +31,14 @@ npm run login
 
 The login helper saves a session string to `TELEGRAM_SESSION_PATH`, defaulting to `.local/telegram.session`.
 
+If login codes are not arriving, use QR login instead:
+
+```bash
+npm run login:qr
+```
+
+Then scan the terminal QR code from Telegram mobile: **Settings -> Devices -> Link Desktop Device**.
+
 ## Build
 
 ```bash

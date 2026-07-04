@@ -33,6 +33,20 @@ npm run login
 
 The helper prompts for phone number and login code. If your account has two-step verification enabled, set `TELEGRAM_PASSWORD` in your shell or `.env` before running the login helper.
 
+If the Telegram login code is not delivered, use QR login:
+
+```bash
+npm run login:qr
+```
+
+Scan the terminal QR code from an already logged-in Telegram mobile app:
+
+```text
+Telegram -> Settings -> Devices -> Link Desktop Device
+```
+
+The QR token refreshes automatically while the helper is running.
+
 ## Build
 
 ```bash

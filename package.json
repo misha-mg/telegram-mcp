@@ -18,12 +18,14 @@
   "license": "MIT",
   "bin": {
     "telegram-mcp": "./dist/server.js",
-    "telegram-mcp-login": "./dist/login.js"
+    "telegram-mcp-login": "./dist/login.js",
+    "telegram-mcp-login-qr": "./dist/qrLogin.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/server.ts",
     "login": "tsx src/login.ts",
+    "login:qr": "tsx src/qrLogin.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
@@ -37,11 +39,13 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.2.0",
     "input": "^1.0.1",
+    "qrcode": "^1.5.4",
     "telegram": "^2.26.22",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.0.10",
+    "@types/qrcode": "^1.5.6",
     "tsx": "^4.20.3",
     "typescript": "^5.8.3",
     "vitest": "^4.0.7"

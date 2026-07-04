@@ -11,6 +11,7 @@ describe("MCP stdio server", () => {
       env: {
         PATH: process.env.PATH ?? "",
         HOME: process.env.HOME ?? "",
+        DOTENV_CONFIG_PATH: "/tmp/telegram-mcp-test-env-does-not-exist",
       },
       stderr: "pipe",
       cwd: process.cwd(),
