@@ -45,6 +45,7 @@ describe("format helpers", () => {
       senderName: "Olya K",
       replyToId: "7",
       hasMedia: false,
+      mediaKind: null,
       text: "Hello",
     });
   });

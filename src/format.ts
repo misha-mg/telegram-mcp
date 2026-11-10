@@ -34,8 +34,65 @@ export function serializeMessage(message: UnknownRecord) {
     senderName: senderName(message),
     replyToId: stringifyId(replyTo.replyToMsgId),
     hasMedia: Boolean(message.media),
+    mediaKind: describeMedia(message)?.kind ?? null,
     text: message.message ?? message.text ?? "",
   };
+}
+
+export type MediaKind = "voice" | "video_note" | "audio" | "video" | "photo" | "document" | "other";
+
+export type MediaInfo = {
+  kind: MediaKind;
+  mimeType: string | null;
+  durationSeconds: number | null;
+};
+
+/** Kinds that carry speech and can be passed to telegram_transcribe_voice. */
+export const TRANSCRIBABLE_KINDS: ReadonlySet<MediaKind> = new Set(["voice", "video_note", "audio", "video"]);
+
+export function describeMedia(message: UnknownRecord): MediaInfo | null {
+  const media = message.media as UnknownRecord | undefined;
+  if (!media) {
+    return null;
+  }
+
+  const document = media.document as UnknownRecord | undefined;
+  if (!document) {
+    return { kind: media.photo ? "photo" : "other", mimeType: null, durationSeconds: null };
+  }
+
+  const mimeType = typeof document.mimeType === "string" ? document.mimeType : null;
+  const attributes = Array.isArray(document.attributes) ? (document.attributes as UnknownRecord[]) : [];
+  const audio = attributes.find((attribute) => attribute.className === "DocumentAttributeAudio");
+  const video = attributes.find((attribute) => attribute.className === "DocumentAttributeVideo");
+  const duration = Number((audio ?? video)?.duration);
+  const durationSeconds = Number.isFinite(duration) ? duration : null;
+
+  let kind: MediaKind = "document";
+  if (audio?.voice) kind = "voice";
+  else if (video?.roundMessage) kind = "video_note";
+  else if (audio || mimeType?.startsWith("audio/")) kind = "audio";
+  else if (video || mimeType?.startsWith("video/")) kind = "video";
+
+  return { kind, mimeType, durationSeconds };
+}
+
+/** File extension for a media MIME type, used when handing the bytes to ffmpeg or an upload API. */
+export function extensionForMime(mimeType: string | null): string {
+  const map: Record<string, string> = {
+    "audio/ogg": "ogg",
+    "audio/opus": "ogg",
+    "audio/mpeg": "mp3",
+    "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/webm": "webm",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+  };
+  return (mimeType && map[mimeType.split(";")[0].trim().toLowerCase()]) || "ogg";
 }
 
 function senderName(message: UnknownRecord): string | null {

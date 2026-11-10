@@ -5,6 +5,7 @@ import {
   type TelegramToolDependencies,
 } from "../src/toolHandlers.js";
 import type { TelegramMcpConfig } from "../src/config.js";
+import type { Transcriber } from "../src/transcribe.js";
 import { parseToolJson } from "./helpers.js";
 
 const baseConfig = {
@@ -22,6 +23,7 @@ function makeClient(overrides: Partial<TelegramClientLike> = {}): TelegramClient
     getInputEntity: vi.fn(async (peer: string) => ({ resolved: peer })),
     sendMessage: vi.fn().mockResolvedValue({ id: 42 }),
     saveDraft: vi.fn().mockResolvedValue(undefined),
+    downloadMedia: vi.fn().mockResolvedValue(Buffer.from("audio")),
     ...overrides,
   };
 }
@@ -30,11 +32,13 @@ function makeDeps(
   client = makeClient(),
   config: TelegramMcpConfig = baseConfig,
   session = "session",
+  transcriber: Transcriber | null = null,
 ): TelegramToolDependencies {
   return {
     loadConfig: vi.fn(() => config),
     loadSession: vi.fn().mockResolvedValue(session),
     getTelegramClient: vi.fn().mockResolvedValue(client),
+    getTranscriber: vi.fn(() => transcriber),
   };
 }
 
@@ -218,5 +222,67 @@ describe("telegram tool handlers", () => {
     expect(client.saveDraft).toHaveBeenCalledWith({ kind: "work-input" }, "On it!");
     expect(client.sendMessage).not.toHaveBeenCalled();
     expect(result).toMatchObject({ drafted: true, sent: false });
+  });
+  const voiceMessage = {
+    id: 10,
+    date: 1_800_000_000,
+    sender: { firstName: "Anton" },
+    media: {
+      document: {
+        mimeType: "audio/ogg",
+        attributes: [{ className: "DocumentAttributeAudio", voice: true, duration: 12 }],
+      },
+    },
+  };
+  const textMessage = { id: 11, message: "just text" };
+
+  it("blocks transcription when no backend is configured", async () => {
+    const client = makeClient();
+    const deps = makeDeps(client, baseConfig, "session", null);
+    const handlers = createTelegramToolHandlers(deps);
+
+    const result = parseToolJson(await handlers.telegramTranscribeVoice({ peer: "me", messageIds: [10] }));
+
+    expect(result.blocked).toBe(true);
+    expect(result.reason).toContain("WHISPER_MODEL_PATH");
+    expect(deps.getTelegramClient).not.toHaveBeenCalled();
+  });
+
+  it("transcribes voice messages in order and reports per-message errors", async () => {
+    const client = makeClient({ getMessages: vi.fn().mockResolvedValue([textMessage, voiceMessage]) });
+    const transcriber: Transcriber = {
+      backend: "local",
+      transcribe: vi.fn().mockResolvedValue("привет, едем в горы"),
+    };
+    const handlers = createTelegramToolHandlers(makeDeps(client, baseConfig, "session", transcriber));
+
+    const result = parseToolJson(
+      await handlers.telegramTranscribeVoice({ peer: "me", messageIds: [10, 11, 12], language: "ru" }),
+    );
+
+    expect(client.getMessages).toHaveBeenCalledWith({ resolved: "me" }, { ids: [10, 11, 12] });
+    expect(client.downloadMedia).toHaveBeenCalledOnce();
+    expect(transcriber.transcribe).toHaveBeenCalledWith({ data: Buffer.from("audio"), extension: "ogg" }, "ru");
+    expect(result.backend).toBe("local");
+    expect(result.transcripts).toEqual([
+      expect.objectContaining({ id: "10", kind: "voice", durationSeconds: 12, senderName: "Anton", text: "привет, едем в горы" }),
+      expect.objectContaining({ id: "11", error: expect.stringContaining("none") }),
+      { id: "12", error: "Message not found." },
+    ]);
+  });
+
+  it("keeps going when one transcription fails", async () => {
+    const second = { ...voiceMessage, id: 20 };
+    const client = makeClient({ getMessages: vi.fn().mockResolvedValue([voiceMessage, second]) });
+    const transcriber: Transcriber = {
+      backend: "openai",
+      transcribe: vi.fn().mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce("ok"),
+    };
+    const handlers = createTelegramToolHandlers(makeDeps(client, baseConfig, "session", transcriber));
+
+    const result = parseToolJson(await handlers.telegramTranscribeVoice({ peer: "me", messageIds: [10, 20] }));
+
+    expect(result.transcripts[0]).toMatchObject({ id: "10", error: "boom" });
+    expect(result.transcripts[1]).toMatchObject({ id: "20", text: "ok" });
   });
 });

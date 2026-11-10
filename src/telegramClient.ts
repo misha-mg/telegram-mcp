@@ -45,6 +45,12 @@ export async function saveDraft(client: TelegramClient, entity: unknown, message
   );
 }
 
+/** Downloads a message's media into memory. Returns undefined when the message has none. */
+export async function downloadMessageMedia(client: TelegramClient, message: unknown): Promise<Buffer | undefined> {
+  const result = await client.downloadMedia(message as Api.Message, {});
+  return Buffer.isBuffer(result) ? result : undefined;
+}
+
 export function resetTelegramClientForTests(): void {
   clientPromise = undefined;
 }

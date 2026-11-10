@@ -4,6 +4,7 @@ import { createTelegramToolHandlers, type TelegramToolDependencies } from "./too
 
 const MAX_DIALOG_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 300;
+const MAX_TRANSCRIBE_IDS = 20;
 const PEER_DESCRIPTION =
   'Chat to use: the `peer` id from telegram_list_dialogs, an exact or unique partial chat name, @username, or "me".';
 
@@ -79,5 +80,23 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
       },
     },
     handlers.telegramSaveDraft,
+  );
+
+  server.registerTool(
+    "telegram_transcribe_voice",
+    {
+      description:
+        "Transcribe voice messages, video notes (round videos), audio and video files to text. Find candidates via `mediaKind` in telegram_read_messages / telegram_search_messages. Runs locally with whisper.cpp or through an OpenAI-compatible API, depending on configuration.",
+      inputSchema: {
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
+        messageIds: z.array(z.number().int().positive()).min(1).max(MAX_TRANSCRIBE_IDS).describe("Message `id`s to transcribe, processed in order."),
+        language: z
+          .string()
+          .regex(/^(auto|[a-z]{2})$/)
+          .optional()
+          .describe('ISO-639-1 code such as "ru", "uk", "en", or "auto". Defaults to TELEGRAM_MCP_TRANSCRIBE_LANGUAGE (auto).'),
+      },
+    },
+    handlers.telegramTranscribeVoice,
   );
 }

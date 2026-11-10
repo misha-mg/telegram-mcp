@@ -60,3 +60,15 @@ Inputs:
 - `message`: draft text, max 4096 characters.
 
 Safety gate: `TELEGRAM_MCP_ENABLE_DRAFTS` must be exactly `true`, otherwise the tool returns a blocked result.
+
+## `telegram_transcribe_voice`
+
+Transcribes voice messages, round video notes, audio files and videos to text. Messages that can be transcribed show `mediaKind` `voice`, `video_note`, `audio` or `video` in `telegram_read_messages` / `telegram_search_messages`.
+
+Inputs:
+
+- `peer`: Telegram peer.
+- `messageIds`: 1 to 20 message ids, processed in order.
+- `language`: optional ISO-639-1 code (`ru`, `uk`, `en`...) or `auto`.
+
+Returns one entry per id with `text`, or `error` when the message is missing, has no audio, or transcription failed. Returns a blocked result if no backend is configured. Setup: [Voice Transcription](transcription.md).

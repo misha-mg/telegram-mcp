@@ -83,6 +83,7 @@ Example stdio config:
 - `telegram_search_messages`: searches messages in a peer.
 - `telegram_send_message`: sends one message only when explicitly enabled.
 - `telegram_save_draft`: saves a draft in a chat without sending it, only when explicitly enabled.
+- `telegram_transcribe_voice`: transcribes voice messages and video notes, locally with whisper.cpp or through an OpenAI-compatible API ([setup](docs/transcription.md)).
 
 Chats can be addressed by the `peer` id from `telegram_list_dialogs`, by an exact or unique partial chat name, by `@username`, or as `me`.
 
@@ -91,4 +92,5 @@ Chats can be addressed by the `peer` id from `telegram_list_dialogs`, by an exac
 - [PRD](docs/product/telegram-mcp-server-prd.md)
 - [Setup Guide](docs/setup.md)
 - [Tool Reference](docs/tools.md)
+- [Voice Transcription](docs/transcription.md)
 - [Security Notes](docs/security.md)
