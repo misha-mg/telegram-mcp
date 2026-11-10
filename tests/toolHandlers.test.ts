@@ -19,8 +19,9 @@ function makeClient(overrides: Partial<TelegramClientLike> = {}): TelegramClient
     checkAuthorization: vi.fn().mockResolvedValue(true),
     getDialogs: vi.fn().mockResolvedValue([]),
     getMessages: vi.fn().mockResolvedValue([]),
-    getEntity: vi.fn().mockResolvedValue({ id: "entity" }),
+    getInputEntity: vi.fn(async (peer: string) => ({ resolved: peer })),
     sendMessage: vi.fn().mockResolvedValue({ id: 42 }),
+    saveDraft: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -81,6 +82,7 @@ describe("telegram tool handlers", () => {
     expect(client.getDialogs).toHaveBeenCalledWith({ limit: 10 });
     expect(result.dialogs).toEqual([
       {
+        peer: "123",
         id: "123",
         name: "Team",
         isChannel: true,
@@ -99,7 +101,7 @@ describe("telegram tool handlers", () => {
 
     const result = parseToolJson(await handlers.telegramReadMessages({ peer: "me", limit: 5 }));
 
-    expect(client.getMessages).toHaveBeenCalledWith("me", { limit: 5 });
+    expect(client.getMessages).toHaveBeenCalledWith({ resolved: "me" }, { limit: 5 });
     expect(result.messages[0]).toMatchObject({
       id: "1",
       date: "2026-07-03T12:00:00.000Z",
@@ -113,7 +115,7 @@ describe("telegram tool handlers", () => {
 
     const result = parseToolJson(await handlers.telegramSearchMessages({ peer: "@channel", query: "decline", limit: 7 }));
 
-    expect(client.getMessages).toHaveBeenCalledWith("@channel", { limit: 7, search: "decline" });
+    expect(client.getMessages).toHaveBeenCalledWith({ resolved: "@channel" }, { limit: 7, search: "decline" });
     expect(result).toMatchObject({ peer: "@channel", query: "decline", messages: [] });
   });
 
@@ -143,15 +145,78 @@ describe("telegram tool handlers", () => {
 
   it("sends exactly one message when both safety gates pass", async () => {
     const client = makeClient({
-      getEntity: vi.fn().mockResolvedValue({ id: "peer-entity" }),
+      getInputEntity: vi.fn().mockResolvedValue({ id: "peer-entity" }),
       sendMessage: vi.fn().mockResolvedValue({ id: 777n }),
     });
     const handlers = createTelegramToolHandlers(makeDeps(client, { ...baseConfig, sendEnabled: true }));
 
     const result = parseToolJson(await handlers.telegramSendMessage({ peer: "me", message: "hello", confirm: "SEND" }));
 
-    expect(client.getEntity).toHaveBeenCalledWith("me");
+    expect(client.getInputEntity).toHaveBeenCalledWith("me");
     expect(client.sendMessage).toHaveBeenCalledWith({ id: "peer-entity" }, { message: "hello" });
     expect(result).toEqual({ sent: true, peer: "me", messageId: "777" });
+  });
+
+  const tripDialog = {
+    id: -1001234567890n,
+    name: "Barcelona Trip 🌴",
+    inputEntity: { kind: "trip-input" },
+    entity: { id: 1234567890n, title: "Barcelona Trip 🌴", megagroup: true },
+  };
+  const workDialog = {
+    id: -555n,
+    name: "Work Team",
+    inputEntity: { kind: "work-input" },
+    entity: { id: 555n, title: "Work Team" },
+  };
+
+  it("resolves a marked peer id from telegram_list_dialogs through the dialog list", async () => {
+    const client = makeClient({ getDialogs: vi.fn().mockResolvedValue([tripDialog, workDialog]) });
+    const handlers = createTelegramToolHandlers(makeDeps(client));
+
+    await handlers.telegramReadMessages({ peer: "-1001234567890", limit: 5 });
+
+    expect(client.getMessages).toHaveBeenCalledWith({ kind: "trip-input" }, { limit: 5 });
+    expect(client.getInputEntity).not.toHaveBeenCalled();
+  });
+
+  it("resolves a chat by unique partial name, case-insensitively", async () => {
+    const client = makeClient({ getDialogs: vi.fn().mockResolvedValue([tripDialog, workDialog]) });
+    const handlers = createTelegramToolHandlers(makeDeps(client));
+
+    await handlers.telegramReadMessages({ peer: "barcelona", limit: 5 });
+
+    expect(client.getMessages).toHaveBeenCalledWith({ kind: "trip-input" }, { limit: 5 });
+  });
+
+  it("rejects ambiguous names and lists the options", async () => {
+    const otherTrip = { ...tripDialog, id: -1009n, name: "Barcelona Trip 2025", inputEntity: { kind: "old" } };
+    const client = makeClient({ getDialogs: vi.fn().mockResolvedValue([tripDialog, otherTrip]) });
+    const handlers = createTelegramToolHandlers(makeDeps(client));
+
+    await expect(handlers.telegramReadMessages({ peer: "barcelona", limit: 5 })).rejects.toThrow(/Ambiguous/);
+    expect(client.getMessages).not.toHaveBeenCalled();
+  });
+
+  it("blocks drafts when the drafts gate is disabled", async () => {
+    const client = makeClient();
+    const deps = makeDeps(client, { ...baseConfig, draftsEnabled: false });
+    const handlers = createTelegramToolHandlers(deps);
+
+    const result = parseToolJson(await handlers.telegramSaveDraft({ peer: "Work Team", message: "hi" }));
+
+    expect(result.blocked).toBe(true);
+    expect(deps.getTelegramClient).not.toHaveBeenCalled();
+  });
+
+  it("saves a draft without sending when drafts are enabled", async () => {
+    const client = makeClient({ getDialogs: vi.fn().mockResolvedValue([tripDialog, workDialog]) });
+    const handlers = createTelegramToolHandlers(makeDeps(client, { ...baseConfig, draftsEnabled: true }));
+
+    const result = parseToolJson(await handlers.telegramSaveDraft({ peer: "Work Team", message: "On it!" }));
+
+    expect(client.saveDraft).toHaveBeenCalledWith({ kind: "work-input" }, "On it!");
+    expect(client.sendMessage).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ drafted: true, sent: false });
   });
 });

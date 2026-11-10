@@ -1,14 +1,16 @@
 import type { TelegramMcpConfig } from "./config.js";
 import { getConfigStatus, loadConfig, loadSession } from "./config.js";
 import { serializeDialog, serializeMessage, toSafeJson } from "./format.js";
-import { getTelegramClient } from "./telegramClient.js";
+import { createPeerResolver } from "./peers.js";
+import { getTelegramClient, saveDraft } from "./telegramClient.js";
 
 export type TelegramClientLike = {
   checkAuthorization(): Promise<boolean>;
   getDialogs(params: { limit: number }): Promise<unknown[]>;
-  getMessages(peer: string, params: { limit: number; search?: string }): Promise<unknown[]>;
-  getEntity(peer: string): Promise<unknown>;
+  getMessages(peer: unknown, params: { limit: number; search?: string }): Promise<unknown[]>;
+  getInputEntity(peer: string): Promise<unknown>;
   sendMessage(entity: unknown, params: { message: string }): Promise<{ id: unknown }>;
+  saveDraft(entity: unknown, message: string): Promise<void>;
 };
 
 export type TelegramToolDependencies = {
@@ -22,14 +24,27 @@ export type TelegramListDialogsInput = { limit: number };
 export type TelegramReadMessagesInput = { peer: string; limit: number };
 export type TelegramSearchMessagesInput = { peer: string; query: string; limit: number };
 export type TelegramSendMessageInput = { peer: string; message: string; confirm: string };
+export type TelegramSaveDraftInput = { peer: string; message: string };
 
 const defaultDependencies: TelegramToolDependencies = {
   loadConfig,
   loadSession,
-  getTelegramClient: getTelegramClient as (config?: TelegramMcpConfig) => Promise<TelegramClientLike>,
+  getTelegramClient: async (config?: TelegramMcpConfig): Promise<TelegramClientLike> => {
+    const client = await getTelegramClient(config);
+    return {
+      checkAuthorization: () => client.checkAuthorization(),
+      getDialogs: (params) => client.getDialogs(params),
+      getMessages: (peer, params) => client.getMessages(peer as never, params),
+      getInputEntity: (peer) => client.getInputEntity(peer),
+      sendMessage: (entity, params) => client.sendMessage(entity as never, params),
+      saveDraft: (entity, message) => saveDraft(client, entity, message),
+    };
+  },
 };
 
 export function createTelegramToolHandlers(deps: TelegramToolDependencies = defaultDependencies) {
+  const resolvePeer = createPeerResolver();
+
   return {
     telegramStatus: async (_input: TelegramStatusInput = {}) => {
       const config = deps.loadConfig();
@@ -67,7 +82,8 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
 
     telegramReadMessages: async ({ peer, limit }: TelegramReadMessagesInput) => {
       const client = await deps.getTelegramClient();
-      const messages = await client.getMessages(peer, { limit });
+      const entity = await resolvePeer(client, peer);
+      const messages = await client.getMessages(entity, { limit });
 
       return textResult({
         peer,
@@ -77,7 +93,8 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
 
     telegramSearchMessages: async ({ peer, query, limit }: TelegramSearchMessagesInput) => {
       const client = await deps.getTelegramClient();
-      const messages = await client.getMessages(peer, { limit, search: query });
+      const entity = await resolvePeer(client, peer);
+      const messages = await client.getMessages(entity, { limit, search: query });
 
       return textResult({
         peer,
@@ -103,7 +120,7 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
       }
 
       const client = await deps.getTelegramClient(config);
-      const entity = await client.getEntity(peer);
+      const entity = await resolvePeer(client, peer);
       const sent = await client.sendMessage(entity, { message });
 
       return textResult({
@@ -112,6 +129,28 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
         messageId: String(sent.id),
       });
     },
+
+    telegramSaveDraft: async ({ peer, message }: TelegramSaveDraftInput) => {
+      const config = deps.loadConfig();
+      if (!config.draftsEnabled) {
+        return textResult({
+          blocked: true,
+          reason: "Drafts are disabled. Set TELEGRAM_MCP_ENABLE_DRAFTS=true to enable this tool.",
+        });
+      }
+
+      const client = await deps.getTelegramClient(config);
+      const entity = await resolvePeer(client, peer);
+      await client.saveDraft(entity, message);
+
+      return textResult({
+        drafted: true,
+        sent: false,
+        peer,
+        note: "Saved as the chat's draft (replaces any existing draft). The user must review and send it in Telegram.",
+      });
+    },
+
   };
 }
 

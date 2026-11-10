@@ -3,7 +3,9 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { createTelegramToolHandlers, type TelegramToolDependencies } from "./toolHandlers.js";
 
 const MAX_DIALOG_LIMIT = 50;
-const MAX_MESSAGE_LIMIT = 100;
+const MAX_MESSAGE_LIMIT = 300;
+const PEER_DESCRIPTION =
+  'Chat to use: the `peer` id from telegram_list_dialogs, an exact or unique partial chat name, @username, or "me".';
 
 export function registerTelegramTools(server: McpServer, deps?: TelegramToolDependencies): void {
   const handlers = createTelegramToolHandlers(deps);
@@ -20,7 +22,7 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
   server.registerTool(
     "telegram_list_dialogs",
     {
-      description: "List recent Telegram dialogs for the authenticated account.",
+      description: "List recent Telegram dialogs for the authenticated account. Each result has a `peer` id usable by the other tools.",
       inputSchema: {
         limit: z.number().int().min(1).max(MAX_DIALOG_LIMIT).default(20),
       },
@@ -31,9 +33,9 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
   server.registerTool(
     "telegram_read_messages",
     {
-      description: "Read recent messages from a Telegram peer, such as @username, channel username, phone, or saved dialog peer.",
+      description: "Read recent messages (newest first) from a Telegram chat.",
       inputSchema: {
-        peer: z.string().min(1),
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
         limit: z.number().int().min(1).max(MAX_MESSAGE_LIMIT).default(20),
       },
     },
@@ -43,9 +45,9 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
   server.registerTool(
     "telegram_search_messages",
     {
-      description: "Search recent messages in a Telegram peer.",
+      description: "Search messages in a Telegram chat.",
       inputSchema: {
-        peer: z.string().min(1),
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
         query: z.string().min(1),
         limit: z.number().int().min(1).max(MAX_MESSAGE_LIMIT).default(20),
       },
@@ -58,11 +60,24 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
     {
       description: "Send one Telegram message. Disabled unless TELEGRAM_MCP_ENABLE_SEND=true and confirm is SEND.",
       inputSchema: {
-        peer: z.string().min(1),
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
         message: z.string().min(1).max(4096),
         confirm: z.string(),
       },
     },
     handlers.telegramSendMessage,
+  );
+
+  server.registerTool(
+    "telegram_save_draft",
+    {
+      description:
+        "Save text as the draft in a Telegram chat's input box, synced to all the user's devices. Does NOT send; the user reviews and sends it themselves. Replaces any existing draft in that chat. Disabled unless TELEGRAM_MCP_ENABLE_DRAFTS=true.",
+      inputSchema: {
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
+        message: z.string().min(1).max(4096),
+      },
+    },
+    handlers.telegramSaveDraft,
   );
 }

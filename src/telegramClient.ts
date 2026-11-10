@@ -1,4 +1,4 @@
-import { TelegramClient } from "telegram";
+import { Api, TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import type { TelegramMcpConfig } from "./config.js";
 import { assertTelegramConfig, loadConfig, loadSession } from "./config.js";
@@ -33,6 +33,16 @@ async function createTelegramClient(config: TelegramMcpConfig): Promise<Telegram
   }
 
   return client;
+}
+
+/** Saves `message` as the draft of the given chat. Nothing is sent. */
+export async function saveDraft(client: TelegramClient, entity: unknown, message: string): Promise<void> {
+  await client.invoke(
+    new Api.messages.SaveDraft({
+      peer: entity as Api.TypeEntityLike,
+      message,
+    }),
+  );
 }
 
 export function resetTelegramClientForTests(): void {

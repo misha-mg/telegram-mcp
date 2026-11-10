@@ -9,6 +9,7 @@ This project exposes a small, safety-focused set of Telegram tools to MCP client
 - Read tools are available after login.
 - Sending is disabled by default.
 - `telegram_send_message` requires both `TELEGRAM_MCP_ENABLE_SEND=true` and `confirm: "SEND"`.
+- `telegram_save_draft` requires `TELEGRAM_MCP_ENABLE_DRAFTS=true` and never sends: the text lands in the chat's input box for you to review.
 - No background polling, bulk send loop, or outreach automation is included.
 
 ## Setup
@@ -81,6 +82,9 @@ Example stdio config:
 - `telegram_read_messages`: reads recent messages from a peer.
 - `telegram_search_messages`: searches messages in a peer.
 - `telegram_send_message`: sends one message only when explicitly enabled.
+- `telegram_save_draft`: saves a draft in a chat without sending it, only when explicitly enabled.
+
+Chats can be addressed by the `peer` id from `telegram_list_dialogs`, by an exact or unique partial chat name, by `@username`, or as `me`.
 
 ## Documentation
 

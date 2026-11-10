@@ -24,6 +24,7 @@ describe("MCP stdio server", () => {
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         "telegram_list_dialogs",
         "telegram_read_messages",
+        "telegram_save_draft",
         "telegram_search_messages",
         "telegram_send_message",
         "telegram_status",
