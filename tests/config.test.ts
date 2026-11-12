@@ -24,6 +24,7 @@ describe("config", () => {
       session: undefined,
       sessionPath: ".local/telegram.session",
       sendEnabled: false,
+      draftsEnabled: false,
     });
   });
 
@@ -40,6 +41,7 @@ describe("config", () => {
       session: "session",
       sessionPath: "/tmp/session",
       sendEnabled: true,
+      draftsEnabled: false,
     });
 
     process.env.TELEGRAM_MCP_ENABLE_SEND = "TRUE";

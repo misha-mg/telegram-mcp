@@ -24,9 +24,12 @@ describe("MCP stdio server", () => {
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
         "telegram_list_dialogs",
         "telegram_read_messages",
+        "telegram_save_draft",
         "telegram_search_messages",
         "telegram_send_message",
         "telegram_status",
+        "telegram_transcribe_voice",
+        "telegram_view_media",
       ]);
 
       const status = parseToolJson(await client.callTool({ name: "telegram_status", arguments: {} }));

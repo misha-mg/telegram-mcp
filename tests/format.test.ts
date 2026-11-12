@@ -18,6 +18,7 @@ describe("format helpers", () => {
         },
       }),
     ).toEqual({
+      peer: "123",
       id: "123",
       name: "Payments Chat",
       isChannel: false,
@@ -33,12 +34,18 @@ describe("format helpers", () => {
         id: 10,
         date: 1_700_000_000,
         senderId: 999n,
+        sender: { firstName: "Olya", lastName: "K" },
+        replyTo: { replyToMsgId: 7 },
         message: "Hello",
       }),
     ).toEqual({
       id: "10",
       date: "2023-11-14T22:13:20.000Z",
       senderId: "999",
+      senderName: "Olya K",
+      replyToId: "7",
+      hasMedia: false,
+      mediaKind: null,
       text: "Hello",
     });
   });
