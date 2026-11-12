@@ -92,6 +92,8 @@ describe("media detection", () => {
       kind: "voice",
       mimeType: "audio/ogg",
       durationSeconds: 5,
+      sizeBytes: null,
+      fileName: null,
     });
     expect(describeMedia(doc("video/mp4", [{ className: "DocumentAttributeVideo", roundMessage: true, duration: 9 }]))?.kind).toBe("video_note");
     expect(describeMedia({ media: { photo: {} } })?.kind).toBe("photo");

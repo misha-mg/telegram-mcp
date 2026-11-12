@@ -39,7 +39,7 @@ export type Transcriber = {
 export type RunCommand = (file: string, args: string[]) => Promise<{ stdout: string; stderr: string }>;
 
 const execFileAsync = promisify(execFile);
-const defaultRunCommand: RunCommand = (file, args) =>
+export const defaultRunCommand: RunCommand = (file, args) =>
   execFileAsync(file, args, { windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
 
 /** OpenAI's documented upload limit for /audio/transcriptions. */
@@ -161,7 +161,7 @@ function createOpenAiTranscriber(config: TranscriptionConfig, fetchImpl: typeof 
   };
 }
 
-async function runTool(runCommand: RunCommand, file: string, args: string[]): Promise<void> {
+export async function runTool(runCommand: RunCommand, file: string, args: string[]): Promise<void> {
   try {
     await runCommand(file, args);
   } catch (error) {
@@ -174,7 +174,7 @@ async function runTool(runCommand: RunCommand, file: string, args: string[]): Pr
   }
 }
 
-function safeExtension(extension: string): string {
+export function safeExtension(extension: string): string {
   return /^[a-z0-9]{1,5}$/i.test(extension) ? extension.toLowerCase() : "bin";
 }
 

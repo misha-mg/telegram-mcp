@@ -29,6 +29,7 @@ describe("MCP stdio server", () => {
         "telegram_send_message",
         "telegram_status",
         "telegram_transcribe_voice",
+        "telegram_view_media",
       ]);
 
       const status = parseToolJson(await client.callTool({ name: "telegram_status", arguments: {} }));

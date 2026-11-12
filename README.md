@@ -84,6 +84,7 @@ Example stdio config:
 - `telegram_send_message`: sends one message only when explicitly enabled.
 - `telegram_save_draft`: saves a draft in a chat without sending it, only when explicitly enabled.
 - `telegram_transcribe_voice`: transcribes voice messages and video notes, locally with whisper.cpp or through an OpenAI-compatible API ([setup](docs/transcription.md)).
+- `telegram_view_media`: returns photos and image files as images, and videos, round videos and GIFs as a few evenly spaced frames (needs `ffmpeg`). Videos over `TELEGRAM_MCP_MAX_VIDEO_MB` (default 50) return only their thumbnail.
 
 Chats can be addressed by the `peer` id from `telegram_list_dialogs`, by an exact or unique partial chat name, by `@username`, or as `me`.
 

@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { DEFAULT_FRAMES_PER_VIDEO, MAX_FRAMES_PER_VIDEO } from "./media.js";
 import { createTelegramToolHandlers, type TelegramToolDependencies } from "./toolHandlers.js";
 
 const MAX_DIALOG_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 300;
 const MAX_TRANSCRIBE_IDS = 20;
+const MAX_VIEW_IDS = 10;
 const PEER_DESCRIPTION =
   'Chat to use: the `peer` id from telegram_list_dialogs, an exact or unique partial chat name, @username, or "me".';
 
@@ -98,5 +100,25 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
       },
     },
     handlers.telegramTranscribeVoice,
+  );
+
+  server.registerTool(
+    "telegram_view_media",
+    {
+      description:
+        "Show photos, image files, videos, round videos and GIFs from Telegram messages as images you can look at. Videos come back as evenly spaced frames (very large videos as their thumbnail only). Find candidates via `mediaKind` in telegram_read_messages / telegram_search_messages. Needs ffmpeg for videos.",
+      inputSchema: {
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
+        messageIds: z.array(z.number().int().positive()).min(1).max(MAX_VIEW_IDS).describe("Message `id`s to show, in order."),
+        framesPerVideo: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_FRAMES_PER_VIDEO)
+          .default(DEFAULT_FRAMES_PER_VIDEO)
+          .describe("How many evenly spaced frames to take from each video."),
+      },
+    },
+    handlers.telegramViewMedia,
   );
 }

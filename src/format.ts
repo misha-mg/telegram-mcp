@@ -45,6 +45,10 @@ export type MediaInfo = {
   kind: MediaKind;
   mimeType: string | null;
   durationSeconds: number | null;
+  /** Size in bytes of a document (video, file); null for photos. */
+  sizeBytes?: number | null;
+  /** File name of a document, when Telegram has one. */
+  fileName?: string | null;
 };
 
 /** Kinds that carry speech and can be passed to telegram_transcribe_voice. */
@@ -68,13 +72,35 @@ export function describeMedia(message: UnknownRecord): MediaInfo | null {
   const duration = Number((audio ?? video)?.duration);
   const durationSeconds = Number.isFinite(duration) ? duration : null;
 
+  const fileNameAttr = attributes.find((attribute) => attribute.className === "DocumentAttributeFilename");
+  const size = Number(document.size);
+  const extra = {
+    sizeBytes: Number.isFinite(size) ? size : null,
+    fileName: typeof fileNameAttr?.fileName === "string" ? fileNameAttr.fileName : null,
+  };
+
   let kind: MediaKind = "document";
   if (audio?.voice) kind = "voice";
   else if (video?.roundMessage) kind = "video_note";
   else if (audio || mimeType?.startsWith("audio/")) kind = "audio";
   else if (video || mimeType?.startsWith("video/")) kind = "video";
 
-  return { kind, mimeType, durationSeconds };
+  return { kind, mimeType, durationSeconds, ...extra };
+}
+
+/** Whether telegram_view_media can show this media: photos, image files, videos, round videos, GIFs. */
+export function isViewable(media: MediaInfo): boolean {
+  if (media.kind === "photo" || media.kind === "video" || media.kind === "video_note") return true;
+  return media.kind === "document" && Boolean(media.mimeType?.startsWith("image/"));
+}
+
+/** File extension for an image MIME type or file name, used when handing the bytes to ffmpeg. */
+export function imageExtension(media: MediaInfo): string {
+  if (media.kind === "photo") return "jpg";
+  const fromName = media.fileName?.split(".").pop();
+  if (fromName && /^[a-z0-9]{1,5}$/i.test(fromName)) return fromName.toLowerCase();
+  const subtype = media.mimeType?.split("/")[1]?.split(";")[0]?.trim().toLowerCase();
+  return subtype === "jpeg" ? "jpg" : subtype || "bin";
 }
 
 /** File extension for a media MIME type, used when handing the bytes to ffmpeg or an upload API. */

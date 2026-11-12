@@ -1,8 +1,9 @@
 import type { TelegramMcpConfig } from "./config.js";
 import { getConfigStatus, loadConfig, loadSession } from "./config.js";
-import { describeMedia, extensionForMime, serializeDialog, serializeMessage, toSafeJson, TRANSCRIBABLE_KINDS } from "./format.js";
+import { describeMedia, extensionForMime, imageExtension, isViewable, serializeDialog, serializeMessage, toSafeJson, TRANSCRIBABLE_KINDS } from "./format.js";
 import { createPeerResolver } from "./peers.js";
-import { downloadMessageMedia, getTelegramClient, saveDraft } from "./telegramClient.js";
+import { createMediaProcessor, DEFAULT_FRAMES_PER_VIDEO, loadMediaConfig, type MediaProcessor } from "./media.js";
+import { downloadMessageMedia, downloadMessageThumbnail, getTelegramClient, saveDraft } from "./telegramClient.js";
 import {
   createTranscriber,
   getTranscriptionStatus,
@@ -19,6 +20,7 @@ export type TelegramClientLike = {
   sendMessage(entity: unknown, params: { message: string }): Promise<{ id: unknown }>;
   saveDraft(entity: unknown, message: string): Promise<void>;
   downloadMedia(message: unknown): Promise<Buffer | undefined>;
+  downloadThumbnail(message: unknown): Promise<Buffer | undefined>;
 };
 
 export type TelegramToolDependencies = {
@@ -27,6 +29,8 @@ export type TelegramToolDependencies = {
   getTelegramClient(config?: TelegramMcpConfig): Promise<TelegramClientLike>;
   /** Returns null when no transcription backend is configured. Defaults to reading the environment. */
   getTranscriber?(): Transcriber | null;
+  /** Image/video processing (ffmpeg). Defaults to reading the environment. */
+  getMediaProcessor?(): { processor: MediaProcessor; maxVideoBytes: number };
 };
 
 export type TelegramStatusInput = Record<string, never>;
@@ -36,6 +40,9 @@ export type TelegramSearchMessagesInput = { peer: string; query: string; limit: 
 export type TelegramSendMessageInput = { peer: string; message: string; confirm: string };
 export type TelegramSaveDraftInput = { peer: string; message: string };
 export type TelegramTranscribeVoiceInput = { peer: string; messageIds: number[]; language?: string };
+export type TelegramViewMediaInput = { peer: string; messageIds: number[]; framesPerVideo?: number };
+
+type ContentBlock = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
 
 const defaultDependencies: TelegramToolDependencies = {
   loadConfig,
@@ -50,6 +57,7 @@ const defaultDependencies: TelegramToolDependencies = {
       sendMessage: (entity, params) => client.sendMessage(entity as never, params),
       saveDraft: (entity, message) => saveDraft(client, entity, message),
       downloadMedia: (message) => downloadMessageMedia(client, message),
+      downloadThumbnail: (message) => downloadMessageThumbnail(client, message),
     };
   },
 };
@@ -207,7 +215,90 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
 
       return textResult({ peer, backend: transcriber.backend, transcripts });
     },
+
+    telegramViewMedia: async ({ peer, messageIds, framesPerVideo = DEFAULT_FRAMES_PER_VIDEO }: TelegramViewMediaInput) => {
+      const { processor, maxVideoBytes } = deps.getMediaProcessor
+        ? deps.getMediaProcessor()
+        : (() => {
+            const config = loadMediaConfig();
+            return { processor: createMediaProcessor(config), maxVideoBytes: config.maxVideoBytes };
+          })();
+
+      const client = await deps.getTelegramClient();
+      const entity = await resolvePeer(client, peer);
+      const byId = await fetchMessagesById(client, entity, messageIds);
+
+      const items = [];
+      const content: ContentBlock[] = [];
+      // Sequential: one download and one ffmpeg process at a time.
+      for (const id of messageIds) {
+        const message = byId.get(String(id));
+        if (!message) {
+          items.push({ id: String(id), error: "Message not found." });
+          continue;
+        }
+
+        const { date, senderName, text } = serializeMessage(message);
+        const media = describeMedia(message);
+        const base = { id: String(id), date, senderName, caption: text || undefined, kind: media?.kind ?? "none" };
+        if (!media || !isViewable(media)) {
+          items.push({ ...base, error: `No photo or video to show (media: ${media?.kind ?? "none"}).` });
+          continue;
+        }
+
+        try {
+          if (media.kind === "photo" || media.kind === "document") {
+            const data = await client.downloadMedia(message);
+            if (!data) throw new Error("Could not download the media.");
+            const image = await processor.toImage(data, imageExtension(media));
+            content.push({ type: "text", text: `Message ${id} (${media.kind}${text ? `, caption: ${text}` : ""}):` });
+            content.push(imageBlock(image));
+            items.push({ ...base, images: 1 });
+            continue;
+          }
+
+          // Videos, round videos and GIFs (sent as mp4).
+          const tooLarge = media.sizeBytes !== null && media.sizeBytes !== undefined && media.sizeBytes > maxVideoBytes;
+          if (tooLarge) {
+            const thumb = await client.downloadThumbnail(message);
+            if (!thumb) throw new Error(`Video is ${Math.round(media.sizeBytes! / 1048576)} MB (limit ${Math.round(maxVideoBytes / 1048576)} MB) and has no thumbnail.`);
+            const image = await processor.toImage(thumb, "jpg");
+            content.push({ type: "text", text: `Message ${id} (${media.kind}, thumbnail only: video too large):` });
+            content.push(imageBlock(image));
+            items.push({ ...base, durationSeconds: media.durationSeconds, images: 1, thumbnailOnly: true });
+            continue;
+          }
+
+          const data = await client.downloadMedia(message);
+          if (!data) throw new Error("Could not download the media.");
+          const frames = await processor.videoFrames(data, extensionForMime(media.mimeType ?? "video/mp4"), media.durationSeconds, framesPerVideo);
+          for (const frame of frames) {
+            content.push({ type: "text", text: `Message ${id} (${media.kind}) frame at ${frame.atSeconds}s of ${media.durationSeconds ?? "?"}s:` });
+            content.push(imageBlock(frame));
+          }
+          items.push({ ...base, durationSeconds: media.durationSeconds, images: frames.length });
+        } catch (error) {
+          items.push({ ...base, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+
+      return { content: [{ type: "text" as const, text: toSafeJson({ peer, items }) }, ...content] };
+    },
   };
+}
+
+async function fetchMessagesById(client: TelegramClientLike, entity: unknown, ids: number[]) {
+  const found = await client.getMessages(entity, { ids });
+  const byId = new Map<string, Record<string, unknown>>();
+  for (const message of found) {
+    const record = message as Record<string, unknown> | undefined;
+    if (record?.id !== undefined) byId.set(String(record.id), record);
+  }
+  return byId;
+}
+
+function imageBlock(image: { data: Buffer; mimeType: string }): ContentBlock {
+  return { type: "image", data: image.data.toString("base64"), mimeType: image.mimeType };
 }
 
 export function textResult(value: unknown) {

@@ -51,6 +51,15 @@ export async function downloadMessageMedia(client: TelegramClient, message: unkn
   return Buffer.isBuffer(result) ? result : undefined;
 }
 
+/** Downloads the largest thumbnail of a document (e.g. a video's preview). Undefined when there is none. */
+export async function downloadMessageThumbnail(client: TelegramClient, message: unknown): Promise<Buffer | undefined> {
+  const document = (message as { media?: { document?: { thumbs?: unknown[] } } }).media?.document;
+  const thumbs = document?.thumbs ?? [];
+  if (thumbs.length === 0) return undefined;
+  const result = await client.downloadMedia(message as Api.Message, { thumb: thumbs.length - 1 });
+  return Buffer.isBuffer(result) ? result : undefined;
+}
+
 export function resetTelegramClientForTests(): void {
   clientPromise = undefined;
 }
