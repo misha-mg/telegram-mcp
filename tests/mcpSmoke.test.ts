@@ -27,6 +27,7 @@ describe("MCP stdio server", () => {
         "telegram_read_messages",
         "telegram_save_draft",
         "telegram_search_messages",
+        "telegram_send_file",
         "telegram_send_message",
         "telegram_status",
         "telegram_transcribe_voice",

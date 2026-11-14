@@ -73,6 +73,25 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
   );
 
   server.registerTool(
+    "telegram_send_file",
+    {
+      description:
+        "Upload one local file (archive, PDF, photo, video, any document) and send it to a Telegram chat, optionally with a caption. Disabled unless TELEGRAM_MCP_ENABLE_SEND=true and confirm is SEND. Max 2000 MB.",
+      inputSchema: {
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
+        path: z.string().min(1).describe("Absolute path of the local file (~ allowed)."),
+        caption: z.string().max(1024).optional(),
+        asDocument: z
+          .boolean()
+          .optional()
+          .describe("Send photos and videos as files (no compression). Other files are always sent as documents."),
+        confirm: z.string(),
+      },
+    },
+    handlers.telegramSendFile,
+  );
+
+  server.registerTool(
     "telegram_save_draft",
     {
       description:

@@ -46,6 +46,20 @@ export async function saveDraft(client: TelegramClient, entity: unknown, message
   );
 }
 
+/** Uploads a local file and sends it to the chat. Telegram decides photo/video/document unless `forceDocument` is set. */
+export async function sendLocalFile(
+  client: TelegramClient,
+  entity: unknown,
+  params: { file: string; caption?: string; forceDocument?: boolean },
+): Promise<{ id: unknown }> {
+  return client.sendFile(entity as Api.TypeEntityLike, {
+    file: params.file,
+    caption: params.caption,
+    forceDocument: params.forceDocument ?? false,
+    workers: 4,
+  });
+}
+
 /** Downloads a message's media into memory. Returns undefined when the message has none. */
 export async function downloadMessageMedia(client: TelegramClient, message: unknown): Promise<Buffer | undefined> {
   const result = await client.downloadMedia(message as Api.Message, {});

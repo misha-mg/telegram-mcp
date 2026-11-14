@@ -30,6 +30,7 @@ function setup(dir: string, messages: unknown[] = [pdf, photo, webpage]) {
     getInputEntity: vi.fn(async (peer: string) => ({ resolved: peer })),
     sendMessage: vi.fn(),
     saveDraft: vi.fn(),
+    sendFile: vi.fn().mockResolvedValue({ id: 43 }),
     downloadMedia: vi.fn(),
     downloadThumbnail: vi.fn(),
     downloadMediaToFile: vi.fn(async (_message: unknown, file: string) => {
