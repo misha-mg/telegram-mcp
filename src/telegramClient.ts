@@ -1,3 +1,4 @@
+import { rename, rm, stat, writeFile } from "node:fs/promises";
 import { Api, TelegramClient } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import type { TelegramMcpConfig } from "./config.js";
@@ -49,6 +50,24 @@ export async function saveDraft(client: TelegramClient, entity: unknown, message
 export async function downloadMessageMedia(client: TelegramClient, message: unknown): Promise<Buffer | undefined> {
   const result = await client.downloadMedia(message as Api.Message, {});
   return Buffer.isBuffer(result) ? result : undefined;
+}
+
+/**
+ * Streams a message's media straight to `outputFile` (no full copy in memory) and returns the bytes written.
+ * Writes to a `.part` file first and renames it, so a failed download never leaves a truncated file behind.
+ */
+export async function downloadMessageMediaToFile(client: TelegramClient, message: unknown, outputFile: string): Promise<number> {
+  const partial = `${outputFile}.part`;
+  try {
+    const result = await client.downloadMedia(message as Api.Message, { outputFile: partial });
+    if (result === undefined) throw new Error("The message has no downloadable media.");
+    if (Buffer.isBuffer(result)) await writeFile(partial, result);
+    await rename(partial, outputFile);
+    return (await stat(outputFile)).size;
+  } catch (error) {
+    await rm(partial, { force: true });
+    throw error;
+  }
 }
 
 /** Downloads the largest thumbnail of a document (e.g. a video's preview). Undefined when there is none. */

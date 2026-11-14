@@ -85,6 +85,7 @@ Example stdio config:
 - `telegram_save_draft`: saves a draft in a chat without sending it, only when explicitly enabled.
 - `telegram_transcribe_voice`: transcribes voice messages and video notes, locally with whisper.cpp or through an OpenAI-compatible API ([setup](docs/transcription.md)).
 - `telegram_view_media`: returns photos and image files as images, and videos, round videos and GIFs as a few evenly spaced frames (needs `ffmpeg`). Videos over `TELEGRAM_MCP_MAX_VIDEO_MB` (default 50) return only their thumbnail.
+- `telegram_download_file`: saves files from messages (PDFs and other documents, photos, videos, audio) to `TELEGRAM_MCP_DOWNLOAD_DIR` (default `~/Downloads/Telegram MCP`) or a folder passed per call, and returns their paths. Never overwrites existing files.
 
 Chats can be addressed by the `peer` id from `telegram_list_dialogs`, by an exact or unique partial chat name, by `@username`, or as `me`.
 
