@@ -37,6 +37,7 @@ function setup(processor: MediaProcessor, maxVideoBytes = 50 * 1024 * 1024, mess
     saveDraft: vi.fn(),
     downloadMedia: vi.fn().mockResolvedValue(Buffer.from("bytes")),
     downloadThumbnail: vi.fn().mockResolvedValue(Buffer.from("thumb")),
+    downloadMediaToFile: vi.fn().mockResolvedValue(0),
   };
   const handlers = createTelegramToolHandlers({
     loadConfig: () => ({ sessionPath: "s", sendEnabled: false }),

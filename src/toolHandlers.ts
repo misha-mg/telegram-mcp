@@ -3,7 +3,8 @@ import { getConfigStatus, loadConfig, loadSession } from "./config.js";
 import { describeMedia, extensionForMime, imageExtension, isViewable, serializeDialog, serializeMessage, toSafeJson, TRANSCRIBABLE_KINDS } from "./format.js";
 import { createPeerResolver } from "./peers.js";
 import { createMediaProcessor, DEFAULT_FRAMES_PER_VIDEO, loadMediaConfig, type MediaProcessor } from "./media.js";
-import { downloadMessageMedia, downloadMessageThumbnail, getTelegramClient, saveDraft } from "./telegramClient.js";
+import { downloadMessageMedia, downloadMessageMediaToFile, downloadMessageThumbnail, getTelegramClient, saveDraft } from "./telegramClient.js";
+import { expandHome, fileNameFor, loadDownloadConfig, uniquePath } from "./download.js";
 import {
   createTranscriber,
   getTranscriptionStatus,
@@ -21,6 +22,8 @@ export type TelegramClientLike = {
   saveDraft(entity: unknown, message: string): Promise<void>;
   downloadMedia(message: unknown): Promise<Buffer | undefined>;
   downloadThumbnail(message: unknown): Promise<Buffer | undefined>;
+  /** Streams the media to a file and returns the number of bytes written. */
+  downloadMediaToFile(message: unknown, outputFile: string): Promise<number>;
 };
 
 export type TelegramToolDependencies = {
@@ -31,6 +34,8 @@ export type TelegramToolDependencies = {
   getTranscriber?(): Transcriber | null;
   /** Image/video processing (ffmpeg). Defaults to reading the environment. */
   getMediaProcessor?(): { processor: MediaProcessor; maxVideoBytes: number };
+  /** Default folder for telegram_download_file. Defaults to TELEGRAM_MCP_DOWNLOAD_DIR or ~/Downloads/Telegram MCP. */
+  getDownloadDir?(): string;
 };
 
 export type TelegramStatusInput = Record<string, never>;
@@ -40,6 +45,7 @@ export type TelegramSearchMessagesInput = { peer: string; query: string; limit: 
 export type TelegramSendMessageInput = { peer: string; message: string; confirm: string };
 export type TelegramSaveDraftInput = { peer: string; message: string };
 export type TelegramTranscribeVoiceInput = { peer: string; messageIds: number[]; language?: string };
+export type TelegramDownloadFileInput = { peer: string; messageIds: number[]; directory?: string };
 export type TelegramViewMediaInput = { peer: string; messageIds: number[]; framesPerVideo?: number };
 
 type ContentBlock = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
@@ -58,6 +64,7 @@ const defaultDependencies: TelegramToolDependencies = {
       saveDraft: (entity, message) => saveDraft(client, entity, message),
       downloadMedia: (message) => downloadMessageMedia(client, message),
       downloadThumbnail: (message) => downloadMessageThumbnail(client, message),
+      downloadMediaToFile: (message, outputFile) => downloadMessageMediaToFile(client, message, outputFile),
     };
   },
 };
@@ -214,6 +221,55 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
       }
 
       return textResult({ peer, backend: transcriber.backend, transcripts });
+    },
+
+    telegramDownloadFile: async ({ peer, messageIds, directory }: TelegramDownloadFileInput) => {
+      const targetDir = directory?.trim()
+        ? expandHome(directory.trim())
+        : deps.getDownloadDir
+          ? deps.getDownloadDir()
+          : loadDownloadConfig().directory;
+
+      const client = await deps.getTelegramClient();
+      const entity = await resolvePeer(client, peer);
+      const byId = await fetchMessagesById(client, entity, messageIds);
+
+      const files = [];
+      // Sequential: one download at a time.
+      for (const id of messageIds) {
+        const message = byId.get(String(id));
+        if (!message) {
+          files.push({ id: String(id), error: "Message not found." });
+          continue;
+        }
+
+        const { date, senderName } = serializeMessage(message);
+        const media = describeMedia(message);
+        if (!media || media.kind === "other") {
+          files.push({ id: String(id), date, senderName, error: `No downloadable file (media: ${media?.kind ?? "none"}).` });
+          continue;
+        }
+
+        try {
+          const target = await uniquePath(targetDir, fileNameFor(String(id), media));
+          const bytes = await client.downloadMediaToFile(message, target);
+          const expected = media.sizeBytes ?? null;
+          files.push({
+            id: String(id),
+            date,
+            senderName,
+            kind: media.kind,
+            mimeType: media.mimeType,
+            path: target,
+            sizeBytes: bytes,
+            ...(expected !== null && expected !== bytes ? { warning: `Telegram reports ${expected} bytes but ${bytes} were written.` } : {}),
+          });
+        } catch (error) {
+          files.push({ id: String(id), date, senderName, kind: media.kind, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+
+      return textResult({ peer, directory: targetDir, files });
     },
 
     telegramViewMedia: async ({ peer, messageIds, framesPerVideo = DEFAULT_FRAMES_PER_VIDEO }: TelegramViewMediaInput) => {

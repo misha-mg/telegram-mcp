@@ -22,6 +22,7 @@ describe("MCP stdio server", () => {
     try {
       const tools = await client.listTools();
       expect(tools.tools.map((tool) => tool.name).sort()).toEqual([
+        "telegram_download_file",
         "telegram_list_dialogs",
         "telegram_read_messages",
         "telegram_save_draft",

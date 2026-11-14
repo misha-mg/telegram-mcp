@@ -7,6 +7,7 @@ const MAX_DIALOG_LIMIT = 50;
 const MAX_MESSAGE_LIMIT = 300;
 const MAX_TRANSCRIBE_IDS = 20;
 const MAX_VIEW_IDS = 10;
+const MAX_DOWNLOAD_IDS = 20;
 const PEER_DESCRIPTION =
   'Chat to use: the `peer` id from telegram_list_dialogs, an exact or unique partial chat name, @username, or "me".';
 
@@ -120,5 +121,22 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
       },
     },
     handlers.telegramViewMedia,
+  );
+
+  server.registerTool(
+    "telegram_download_file",
+    {
+      description:
+        "Save files from Telegram messages (documents such as PDFs, archives, photos, videos, audio, voice) to a local folder and return their paths. Find candidates via `mediaKind`, `fileName` and `sizeBytes` in telegram_read_messages / telegram_search_messages. Never overwrites: an existing name gets a \" (2)\" suffix.",
+      inputSchema: {
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
+        messageIds: z.array(z.number().int().positive()).min(1).max(MAX_DOWNLOAD_IDS).describe("Message `id`s whose files to save, in order."),
+        directory: z
+          .string()
+          .optional()
+          .describe("Folder to save into (~ allowed; created if missing). Defaults to TELEGRAM_MCP_DOWNLOAD_DIR or ~/Downloads/Telegram MCP."),
+      },
+    },
+    handlers.telegramDownloadFile,
   );
 }

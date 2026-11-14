@@ -25,6 +25,7 @@ function makeClient(overrides: Partial<TelegramClientLike> = {}): TelegramClient
     saveDraft: vi.fn().mockResolvedValue(undefined),
     downloadMedia: vi.fn().mockResolvedValue(Buffer.from("audio")),
     downloadThumbnail: vi.fn().mockResolvedValue(Buffer.from("thumb")),
+    downloadMediaToFile: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }
