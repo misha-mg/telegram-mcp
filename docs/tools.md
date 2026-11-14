@@ -50,6 +50,22 @@ Safety gates:
 
 If either gate is missing, the tool returns a blocked result before opening Telegram send behavior.
 
+## `telegram_send_file`
+
+Uploads one local file and sends it to a chat. Archives, PDFs and other files go as documents; photos and videos are sent as media unless `asDocument` is set.
+
+Inputs:
+
+- `peer`: Telegram peer (`me` is Saved Messages).
+- `path`: absolute path of the local file, `~` allowed.
+- `caption`: optional text, max 1024 characters.
+- `asDocument`: optional; `true` sends photos and videos as files, without compression.
+- `confirm`: must be exactly `SEND`.
+
+Safety gates are the same as `telegram_send_message`: `TELEGRAM_MCP_ENABLE_SEND` must be exactly `true` and `confirm` exactly `SEND`. Missing files, folders, empty files and files over 2000 MB are refused before connecting to Telegram.
+
+Returns `messageId`, `fileName` and `sizeBytes`.
+
 ## `telegram_save_draft`
 
 Saves text as the draft in a chat's input box, synced to all of the user's devices. Nothing is sent; any existing draft in that chat is replaced.

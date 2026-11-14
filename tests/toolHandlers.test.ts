@@ -23,8 +23,10 @@ function makeClient(overrides: Partial<TelegramClientLike> = {}): TelegramClient
     getInputEntity: vi.fn(async (peer: string) => ({ resolved: peer })),
     sendMessage: vi.fn().mockResolvedValue({ id: 42 }),
     saveDraft: vi.fn().mockResolvedValue(undefined),
+    sendFile: vi.fn().mockResolvedValue({ id: 43 }),
     downloadMedia: vi.fn().mockResolvedValue(Buffer.from("audio")),
     downloadThumbnail: vi.fn().mockResolvedValue(Buffer.from("thumb")),
+    downloadMediaToFile: vi.fn().mockResolvedValue(0),
     ...overrides,
   };
 }

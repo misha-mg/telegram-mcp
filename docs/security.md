@@ -26,9 +26,11 @@ Recommended defaults:
 
 ## MCP Safety
 
-MCP clients can pass model-generated arguments into tools. This server uses two controls for message sending:
+MCP clients can pass model-generated arguments into tools. This server uses two controls for sending messages and files (`telegram_send_message`, `telegram_send_file`):
 
 - an environment-level write gate
 - a per-call confirmation string
+
+`telegram_send_file` can upload any file the server process can read, so treat `path` like the message text: check it before approving the call.
 
 Do not remove these controls unless the server is placed behind stronger approval and allowlist logic.
