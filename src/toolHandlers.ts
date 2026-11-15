@@ -3,7 +3,10 @@ import { getConfigStatus, loadConfig, loadSession } from "./config.js";
 import { describeMedia, extensionForMime, imageExtension, isViewable, serializeDialog, serializeMessage, toSafeJson, TRANSCRIBABLE_KINDS } from "./format.js";
 import { createPeerResolver } from "./peers.js";
 import { createMediaProcessor, DEFAULT_FRAMES_PER_VIDEO, loadMediaConfig, type MediaProcessor } from "./media.js";
-import { downloadMessageMedia, downloadMessageThumbnail, getTelegramClient, saveDraft } from "./telegramClient.js";
+import { stat } from "node:fs/promises";
+import path from "node:path";
+import { downloadMessageMedia, downloadMessageMediaToFile, downloadMessageThumbnail, getTelegramClient, saveDraft, sendLocalFile } from "./telegramClient.js";
+import { expandHome, fileNameFor, loadDownloadConfig, uniquePath } from "./download.js";
 import {
   createTranscriber,
   getTranscriptionStatus,
@@ -18,9 +21,13 @@ export type TelegramClientLike = {
   getMessages(peer: unknown, params: { limit?: number; search?: string; ids?: number[] }): Promise<unknown[]>;
   getInputEntity(peer: string): Promise<unknown>;
   sendMessage(entity: unknown, params: { message: string }): Promise<{ id: unknown }>;
+  editMessage(entity: unknown, params: { message: number; text: string }): Promise<{ id: unknown }>;
   saveDraft(entity: unknown, message: string): Promise<void>;
+  sendFile(entity: unknown, params: { file: string; caption?: string; forceDocument?: boolean }): Promise<{ id: unknown }>;
   downloadMedia(message: unknown): Promise<Buffer | undefined>;
   downloadThumbnail(message: unknown): Promise<Buffer | undefined>;
+  /** Streams the media to a file and returns the number of bytes written. */
+  downloadMediaToFile(message: unknown, outputFile: string): Promise<number>;
 };
 
 export type TelegramToolDependencies = {
@@ -31,6 +38,8 @@ export type TelegramToolDependencies = {
   getTranscriber?(): Transcriber | null;
   /** Image/video processing (ffmpeg). Defaults to reading the environment. */
   getMediaProcessor?(): { processor: MediaProcessor; maxVideoBytes: number };
+  /** Default folder for telegram_download_file. Defaults to TELEGRAM_MCP_DOWNLOAD_DIR or ~/Downloads/Telegram MCP. */
+  getDownloadDir?(): string;
 };
 
 export type TelegramStatusInput = Record<string, never>;
@@ -38,11 +47,17 @@ export type TelegramListDialogsInput = { limit: number };
 export type TelegramReadMessagesInput = { peer: string; limit: number };
 export type TelegramSearchMessagesInput = { peer: string; query: string; limit: number };
 export type TelegramSendMessageInput = { peer: string; message: string; confirm: string };
+export type TelegramEditMessageInput = { peer: string; messageId: number; message: string; confirm: string };
+export type TelegramSendFileInput = { peer: string; path: string; caption?: string; asDocument?: boolean; confirm: string };
 export type TelegramSaveDraftInput = { peer: string; message: string };
 export type TelegramTranscribeVoiceInput = { peer: string; messageIds: number[]; language?: string };
+export type TelegramDownloadFileInput = { peer: string; messageIds: number[]; directory?: string };
 export type TelegramViewMediaInput = { peer: string; messageIds: number[]; framesPerVideo?: number };
 
 type ContentBlock = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+
+/** Telegram's upload limit for regular accounts. */
+export const MAX_SEND_FILE_BYTES = 2000 * 1024 * 1024;
 
 const defaultDependencies: TelegramToolDependencies = {
   loadConfig,
@@ -55,9 +70,12 @@ const defaultDependencies: TelegramToolDependencies = {
       getMessages: (peer, params) => client.getMessages(peer as never, params),
       getInputEntity: (peer) => client.getInputEntity(peer),
       sendMessage: (entity, params) => client.sendMessage(entity as never, params),
+      editMessage: (entity, params) => client.editMessage(entity as never, params),
       saveDraft: (entity, message) => saveDraft(client, entity, message),
+      sendFile: (entity, params) => sendLocalFile(client, entity, params),
       downloadMedia: (message) => downloadMessageMedia(client, message),
       downloadThumbnail: (message) => downloadMessageThumbnail(client, message),
+      downloadMediaToFile: (message, outputFile) => downloadMessageMediaToFile(client, message, outputFile),
     };
   },
 };
@@ -151,6 +169,82 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
       });
     },
 
+    telegramEditMessage: async ({ peer, messageId, message, confirm }: TelegramEditMessageInput) => {
+      const config = deps.loadConfig();
+      if (!config.sendEnabled) {
+        return textResult({
+          blocked: true,
+          reason: "Editing is disabled. Set TELEGRAM_MCP_ENABLE_SEND=true to enable this tool.",
+        });
+      }
+
+      if (confirm !== "EDIT") {
+        return textResult({
+          blocked: true,
+          reason: 'Missing explicit confirmation. Pass confirm: "EDIT".',
+        });
+      }
+
+      const client = await deps.getTelegramClient(config);
+      const entity = await resolvePeer(client, peer);
+      try {
+        const edited = await client.editMessage(entity, { message: messageId, text: message });
+        return textResult({ edited: true, peer, messageId: String(edited?.id ?? messageId) });
+      } catch (error) {
+        // Typical Telegram errors: MESSAGE_AUTHOR_REQUIRED (not our message),
+        // MESSAGE_NOT_MODIFIED (same text), MESSAGE_EDIT_TIME_EXPIRED, MESSAGE_ID_INVALID.
+        return textResult({
+          edited: false,
+          peer,
+          messageId: String(messageId),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+
+    telegramSendFile: async ({ peer, path: filePath, caption, asDocument, confirm }: TelegramSendFileInput) => {
+      const config = deps.loadConfig();
+      if (!config.sendEnabled) {
+        return textResult({
+          blocked: true,
+          reason: "Sending is disabled. Set TELEGRAM_MCP_ENABLE_SEND=true to enable this tool.",
+        });
+      }
+
+      if (confirm !== "SEND") {
+        return textResult({
+          blocked: true,
+          reason: 'Missing explicit confirmation. Pass confirm: "SEND".',
+        });
+      }
+
+      const file = expandHome(filePath.trim());
+      let sizeBytes: number;
+      try {
+        const info = await stat(file);
+        if (!info.isFile()) return textResult({ sent: false, path: file, error: "Not a regular file." });
+        sizeBytes = info.size;
+      } catch {
+        return textResult({ sent: false, path: file, error: "File not found." });
+      }
+      if (sizeBytes === 0) return textResult({ sent: false, path: file, error: "File is empty." });
+      if (sizeBytes > MAX_SEND_FILE_BYTES) {
+        return textResult({ sent: false, path: file, sizeBytes, error: "File is larger than Telegram's 2000 MB upload limit." });
+      }
+
+      const client = await deps.getTelegramClient(config);
+      const entity = await resolvePeer(client, peer);
+      const sent = await client.sendFile(entity, { file, caption: caption || undefined, forceDocument: asDocument ?? false });
+
+      return textResult({
+        sent: true,
+        peer,
+        messageId: String(sent.id),
+        fileName: path.basename(file),
+        sizeBytes,
+      });
+    },
+
     telegramSaveDraft: async ({ peer, message }: TelegramSaveDraftInput) => {
       const config = deps.loadConfig();
       if (!config.draftsEnabled) {
@@ -214,6 +308,55 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
       }
 
       return textResult({ peer, backend: transcriber.backend, transcripts });
+    },
+
+    telegramDownloadFile: async ({ peer, messageIds, directory }: TelegramDownloadFileInput) => {
+      const targetDir = directory?.trim()
+        ? expandHome(directory.trim())
+        : deps.getDownloadDir
+          ? deps.getDownloadDir()
+          : loadDownloadConfig().directory;
+
+      const client = await deps.getTelegramClient();
+      const entity = await resolvePeer(client, peer);
+      const byId = await fetchMessagesById(client, entity, messageIds);
+
+      const files = [];
+      // Sequential: one download at a time.
+      for (const id of messageIds) {
+        const message = byId.get(String(id));
+        if (!message) {
+          files.push({ id: String(id), error: "Message not found." });
+          continue;
+        }
+
+        const { date, senderName } = serializeMessage(message);
+        const media = describeMedia(message);
+        if (!media || media.kind === "other") {
+          files.push({ id: String(id), date, senderName, error: `No downloadable file (media: ${media?.kind ?? "none"}).` });
+          continue;
+        }
+
+        try {
+          const target = await uniquePath(targetDir, fileNameFor(String(id), media));
+          const bytes = await client.downloadMediaToFile(message, target);
+          const expected = media.sizeBytes ?? null;
+          files.push({
+            id: String(id),
+            date,
+            senderName,
+            kind: media.kind,
+            mimeType: media.mimeType,
+            path: target,
+            sizeBytes: bytes,
+            ...(expected !== null && expected !== bytes ? { warning: `Telegram reports ${expected} bytes but ${bytes} were written.` } : {}),
+          });
+        } catch (error) {
+          files.push({ id: String(id), date, senderName, kind: media.kind, error: error instanceof Error ? error.message : String(error) });
+        }
+      }
+
+      return textResult({ peer, directory: targetDir, files });
     },
 
     telegramViewMedia: async ({ peer, messageIds, framesPerVideo = DEFAULT_FRAMES_PER_VIDEO }: TelegramViewMediaInput) => {

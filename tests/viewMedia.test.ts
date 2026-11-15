@@ -34,9 +34,12 @@ function setup(processor: MediaProcessor, maxVideoBytes = 50 * 1024 * 1024, mess
     getMessages: vi.fn().mockResolvedValue(messages),
     getInputEntity: vi.fn(async (peer: string) => ({ resolved: peer })),
     sendMessage: vi.fn(),
+    editMessage: vi.fn().mockResolvedValue({ id: 42 }),
     saveDraft: vi.fn(),
+    sendFile: vi.fn().mockResolvedValue({ id: 43 }),
     downloadMedia: vi.fn().mockResolvedValue(Buffer.from("bytes")),
     downloadThumbnail: vi.fn().mockResolvedValue(Buffer.from("thumb")),
+    downloadMediaToFile: vi.fn().mockResolvedValue(0),
   };
   const handlers = createTelegramToolHandlers({
     loadConfig: () => ({ sessionPath: "s", sendEnabled: false }),

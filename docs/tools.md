@@ -50,6 +50,37 @@ Safety gates:
 
 If either gate is missing, the tool returns a blocked result before opening Telegram send behavior.
 
+## `telegram_edit_message`
+
+Replaces the text of one message the authenticated account already sent.
+
+Inputs:
+
+- `peer`: Telegram peer.
+- `messageId`: `id` of the message, from `telegram_read_messages` or a send result.
+- `message`: the new full text, max 4096 characters.
+- `confirm`: must be exactly `EDIT`.
+
+Safety gates: `TELEGRAM_MCP_ENABLE_SEND` must be exactly `true` and `confirm` exactly `EDIT`; otherwise the tool returns a blocked result before connecting.
+
+Returns `{ edited: true, messageId }`. Telegram errors come back as `{ edited: false, error }` instead of failing the call: for example `MESSAGE_AUTHOR_REQUIRED` (not your message), `MESSAGE_NOT_MODIFIED` (same text) or `MESSAGE_EDIT_TIME_EXPIRED`.
+
+## `telegram_send_file`
+
+Uploads one local file and sends it to a chat. Archives, PDFs and other files go as documents; photos and videos are sent as media unless `asDocument` is set.
+
+Inputs:
+
+- `peer`: Telegram peer (`me` is Saved Messages).
+- `path`: absolute path of the local file, `~` allowed.
+- `caption`: optional text, max 1024 characters.
+- `asDocument`: optional; `true` sends photos and videos as files, without compression.
+- `confirm`: must be exactly `SEND`.
+
+Safety gates are the same as `telegram_send_message`: `TELEGRAM_MCP_ENABLE_SEND` must be exactly `true` and `confirm` exactly `SEND`. Missing files, folders, empty files and files over 2000 MB are refused before connecting to Telegram.
+
+Returns `messageId`, `fileName` and `sizeBytes`.
+
 ## `telegram_save_draft`
 
 Saves text as the draft in a chat's input box, synced to all of the user's devices. Nothing is sent; any existing draft in that chat is replaced.

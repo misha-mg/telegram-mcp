@@ -26,6 +26,7 @@ export function serializeDialog(dialog: UnknownRecord) {
 
 export function serializeMessage(message: UnknownRecord) {
   const replyTo = (message.replyTo ?? {}) as UnknownRecord;
+  const media = describeMedia(message);
 
   return {
     id: stringifyId(message.id),
@@ -34,7 +35,9 @@ export function serializeMessage(message: UnknownRecord) {
     senderName: senderName(message),
     replyToId: stringifyId(replyTo.replyToMsgId),
     hasMedia: Boolean(message.media),
-    mediaKind: describeMedia(message)?.kind ?? null,
+    mediaKind: media?.kind ?? null,
+    ...(media?.fileName ? { fileName: media.fileName } : {}),
+    ...(typeof media?.sizeBytes === "number" ? { sizeBytes: media.sizeBytes } : {}),
     text: message.message ?? message.text ?? "",
   };
 }
