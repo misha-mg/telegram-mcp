@@ -26,10 +26,12 @@ Recommended defaults:
 
 ## MCP Safety
 
-MCP clients can pass model-generated arguments into tools. This server uses two controls for sending messages and files (`telegram_send_message`, `telegram_send_file`):
+MCP clients can pass model-generated arguments into tools. This server uses two controls for sending and editing messages and sending files (`telegram_send_message`, `telegram_edit_message`, `telegram_send_file`):
 
 - an environment-level write gate
 - a per-call confirmation string
+
+`telegram_edit_message` uses its own confirmation word, `EDIT`, so an approved send can't be replayed as an edit or the other way round. Telegram itself only lets the account edit messages it sent.
 
 `telegram_send_file` can upload any file the server process can read, so treat `path` like the message text: check it before approving the call.
 

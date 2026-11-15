@@ -8,7 +8,7 @@ This project exposes a small, safety-focused set of Telegram tools to MCP client
 
 - Read tools are available after login.
 - Sending is disabled by default.
-- `telegram_send_message` and `telegram_send_file` require both `TELEGRAM_MCP_ENABLE_SEND=true` and `confirm: "SEND"`.
+- `telegram_send_message` and `telegram_send_file` require both `TELEGRAM_MCP_ENABLE_SEND=true` and `confirm: "SEND"`; `telegram_edit_message` requires the same env gate and `confirm: "EDIT"`.
 - `telegram_save_draft` requires `TELEGRAM_MCP_ENABLE_DRAFTS=true` and never sends: the text lands in the chat's input box for you to review.
 - No background polling, bulk send loop, or outreach automation is included.
 
@@ -82,6 +82,7 @@ Example stdio config:
 - `telegram_read_messages`: reads recent messages from a peer.
 - `telegram_search_messages`: searches messages in a peer.
 - `telegram_send_message`: sends one message only when explicitly enabled.
+- `telegram_edit_message`: replaces the text of one message the account already sent, under the same env gate with `confirm: "EDIT"`.
 - `telegram_send_file`: uploads one local file (archive, PDF, photo, video...) to a chat, optionally with a caption, under the same gates as `telegram_send_message`.
 - `telegram_save_draft`: saves a draft in a chat without sending it, only when explicitly enabled.
 - `telegram_transcribe_voice`: transcribes voice messages and video notes, locally with whisper.cpp or through an OpenAI-compatible API ([setup](docs/transcription.md)).

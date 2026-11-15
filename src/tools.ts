@@ -73,6 +73,21 @@ export function registerTelegramTools(server: McpServer, deps?: TelegramToolDepe
   );
 
   server.registerTool(
+    "telegram_edit_message",
+    {
+      description:
+        "Edit the text of one message the authenticated account already sent. Telegram only allows editing your own messages (in most chats within 48 hours). Disabled unless TELEGRAM_MCP_ENABLE_SEND=true and confirm is EDIT.",
+      inputSchema: {
+        peer: z.string().min(1).describe(PEER_DESCRIPTION),
+        messageId: z.number().int().positive().describe("`id` of the message to edit, from telegram_read_messages or a send result."),
+        message: z.string().min(1).max(4096).describe("The new full text; it replaces the old text."),
+        confirm: z.string(),
+      },
+    },
+    handlers.telegramEditMessage,
+  );
+
+  server.registerTool(
     "telegram_send_file",
     {
       description:

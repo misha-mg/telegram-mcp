@@ -50,6 +50,21 @@ Safety gates:
 
 If either gate is missing, the tool returns a blocked result before opening Telegram send behavior.
 
+## `telegram_edit_message`
+
+Replaces the text of one message the authenticated account already sent.
+
+Inputs:
+
+- `peer`: Telegram peer.
+- `messageId`: `id` of the message, from `telegram_read_messages` or a send result.
+- `message`: the new full text, max 4096 characters.
+- `confirm`: must be exactly `EDIT`.
+
+Safety gates: `TELEGRAM_MCP_ENABLE_SEND` must be exactly `true` and `confirm` exactly `EDIT`; otherwise the tool returns a blocked result before connecting.
+
+Returns `{ edited: true, messageId }`. Telegram errors come back as `{ edited: false, error }` instead of failing the call: for example `MESSAGE_AUTHOR_REQUIRED` (not your message), `MESSAGE_NOT_MODIFIED` (same text) or `MESSAGE_EDIT_TIME_EXPIRED`.
+
 ## `telegram_send_file`
 
 Uploads one local file and sends it to a chat. Archives, PDFs and other files go as documents; photos and videos are sent as media unless `asDocument` is set.

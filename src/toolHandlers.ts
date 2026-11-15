@@ -21,6 +21,7 @@ export type TelegramClientLike = {
   getMessages(peer: unknown, params: { limit?: number; search?: string; ids?: number[] }): Promise<unknown[]>;
   getInputEntity(peer: string): Promise<unknown>;
   sendMessage(entity: unknown, params: { message: string }): Promise<{ id: unknown }>;
+  editMessage(entity: unknown, params: { message: number; text: string }): Promise<{ id: unknown }>;
   saveDraft(entity: unknown, message: string): Promise<void>;
   sendFile(entity: unknown, params: { file: string; caption?: string; forceDocument?: boolean }): Promise<{ id: unknown }>;
   downloadMedia(message: unknown): Promise<Buffer | undefined>;
@@ -46,6 +47,7 @@ export type TelegramListDialogsInput = { limit: number };
 export type TelegramReadMessagesInput = { peer: string; limit: number };
 export type TelegramSearchMessagesInput = { peer: string; query: string; limit: number };
 export type TelegramSendMessageInput = { peer: string; message: string; confirm: string };
+export type TelegramEditMessageInput = { peer: string; messageId: number; message: string; confirm: string };
 export type TelegramSendFileInput = { peer: string; path: string; caption?: string; asDocument?: boolean; confirm: string };
 export type TelegramSaveDraftInput = { peer: string; message: string };
 export type TelegramTranscribeVoiceInput = { peer: string; messageIds: number[]; language?: string };
@@ -68,6 +70,7 @@ const defaultDependencies: TelegramToolDependencies = {
       getMessages: (peer, params) => client.getMessages(peer as never, params),
       getInputEntity: (peer) => client.getInputEntity(peer),
       sendMessage: (entity, params) => client.sendMessage(entity as never, params),
+      editMessage: (entity, params) => client.editMessage(entity as never, params),
       saveDraft: (entity, message) => saveDraft(client, entity, message),
       sendFile: (entity, params) => sendLocalFile(client, entity, params),
       downloadMedia: (message) => downloadMessageMedia(client, message),
@@ -164,6 +167,39 @@ export function createTelegramToolHandlers(deps: TelegramToolDependencies = defa
         peer,
         messageId: String(sent.id),
       });
+    },
+
+    telegramEditMessage: async ({ peer, messageId, message, confirm }: TelegramEditMessageInput) => {
+      const config = deps.loadConfig();
+      if (!config.sendEnabled) {
+        return textResult({
+          blocked: true,
+          reason: "Editing is disabled. Set TELEGRAM_MCP_ENABLE_SEND=true to enable this tool.",
+        });
+      }
+
+      if (confirm !== "EDIT") {
+        return textResult({
+          blocked: true,
+          reason: 'Missing explicit confirmation. Pass confirm: "EDIT".',
+        });
+      }
+
+      const client = await deps.getTelegramClient(config);
+      const entity = await resolvePeer(client, peer);
+      try {
+        const edited = await client.editMessage(entity, { message: messageId, text: message });
+        return textResult({ edited: true, peer, messageId: String(edited?.id ?? messageId) });
+      } catch (error) {
+        // Typical Telegram errors: MESSAGE_AUTHOR_REQUIRED (not our message),
+        // MESSAGE_NOT_MODIFIED (same text), MESSAGE_EDIT_TIME_EXPIRED, MESSAGE_ID_INVALID.
+        return textResult({
+          edited: false,
+          peer,
+          messageId: String(messageId),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     },
 
     telegramSendFile: async ({ peer, path: filePath, caption, asDocument, confirm }: TelegramSendFileInput) => {

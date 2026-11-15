@@ -12,6 +12,7 @@ function setup(sendEnabled = true) {
     getMessages: vi.fn().mockResolvedValue([]),
     getInputEntity: vi.fn(async (peer: string) => ({ resolved: peer })),
     sendMessage: vi.fn(),
+    editMessage: vi.fn().mockResolvedValue({ id: 42 }),
     saveDraft: vi.fn(),
     sendFile: vi.fn().mockResolvedValue({ id: 77 }),
     downloadMedia: vi.fn(),

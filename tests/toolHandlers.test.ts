@@ -22,6 +22,7 @@ function makeClient(overrides: Partial<TelegramClientLike> = {}): TelegramClient
     getMessages: vi.fn().mockResolvedValue([]),
     getInputEntity: vi.fn(async (peer: string) => ({ resolved: peer })),
     sendMessage: vi.fn().mockResolvedValue({ id: 42 }),
+    editMessage: vi.fn().mockResolvedValue({ id: 42 }),
     saveDraft: vi.fn().mockResolvedValue(undefined),
     sendFile: vi.fn().mockResolvedValue({ id: 43 }),
     downloadMedia: vi.fn().mockResolvedValue(Buffer.from("audio")),
@@ -162,6 +163,43 @@ describe("telegram tool handlers", () => {
     expect(client.getInputEntity).toHaveBeenCalledWith("me");
     expect(client.sendMessage).toHaveBeenCalledWith({ id: "peer-entity" }, { message: "hello" });
     expect(result).toEqual({ sent: true, peer: "me", messageId: "777" });
+  });
+
+  it("blocks editing when the write gate is off or confirmation is missing", async () => {
+    const off = makeDeps(makeClient(), { ...baseConfig, sendEnabled: false });
+    const r1 = parseToolJson(await createTelegramToolHandlers(off).telegramEditMessage({ peer: "me", messageId: 5, message: "x", confirm: "EDIT" }));
+    expect(r1.blocked).toBe(true);
+    expect(off.getTelegramClient).not.toHaveBeenCalled();
+
+    const on = makeDeps(makeClient(), { ...baseConfig, sendEnabled: true });
+    const r2 = parseToolJson(await createTelegramToolHandlers(on).telegramEditMessage({ peer: "me", messageId: 5, message: "x", confirm: "SEND" }));
+    expect(r2.blocked).toBe(true);
+    expect(r2.reason).toContain("EDIT");
+    expect(on.getTelegramClient).not.toHaveBeenCalled();
+  });
+
+  it("edits one message when both gates pass", async () => {
+    const client = makeClient({
+      getInputEntity: vi.fn().mockResolvedValue({ id: "peer-entity" }),
+      editMessage: vi.fn().mockResolvedValue({ id: 99n }),
+    });
+    const handlers = createTelegramToolHandlers(makeDeps(client, { ...baseConfig, sendEnabled: true }));
+
+    const result = parseToolJson(await handlers.telegramEditMessage({ peer: "me", messageId: 99, message: "fixed", confirm: "EDIT" }));
+
+    expect(client.editMessage).toHaveBeenCalledWith({ id: "peer-entity" }, { message: 99, text: "fixed" });
+    expect(client.sendMessage).not.toHaveBeenCalled();
+    expect(result).toEqual({ edited: true, peer: "me", messageId: "99" });
+  });
+
+  it("reports Telegram edit errors instead of throwing", async () => {
+    const client = makeClient({ editMessage: vi.fn().mockRejectedValue(new Error("400: MESSAGE_AUTHOR_REQUIRED")) });
+    const handlers = createTelegramToolHandlers(makeDeps(client, { ...baseConfig, sendEnabled: true }));
+
+    const result = parseToolJson(await handlers.telegramEditMessage({ peer: "me", messageId: 7, message: "x", confirm: "EDIT" }));
+
+    expect(result).toMatchObject({ edited: false, messageId: "7" });
+    expect(result.error).toContain("MESSAGE_AUTHOR_REQUIRED");
   });
 
   const tripDialog = {
